@@ -1,0 +1,47 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint
+        run: ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # Deliberately not installing ultralytics/torch here: none of the
+      # test files need real YOLO inference (test_device_detector.py
+      # injects a fake model), so this stays fast. See README for what
+      # still needs manual, real-model verification.
+      - name: Install test dependencies
+        run: pip install "opencv-contrib-python>=4.8,<6" "numpy>=1.24,<3"
+
+      - name: Run tests
+        run: |
+          python test_infraction_counter.py
+          python test_identity_verifier.py
+          python test_device_detector.py
+          python test_main.py
+          python test_session_logger.py

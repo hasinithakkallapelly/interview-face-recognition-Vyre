@@ -7,12 +7,14 @@ the moment each infraction is recorded, so a session can be reviewed after
 the fact instead of only being visible in the live console output.
 
 Each session gets its own subdirectory under `log_dir`, named by session
-start time, so repeated runs don't overwrite each other.
+start time plus a short random suffix, so repeated runs don't overwrite
+each other -- including two sessions started within the same second.
 """
 
 import json
 import os
 import time
+import uuid
 
 import cv2
 
@@ -20,7 +22,7 @@ import cv2
 class SessionLogger:
     def __init__(self, log_dir: str = "session_logs", save_snapshots: bool = True):
         self.save_snapshots = save_snapshots
-        session_name = time.strftime("session_%Y%m%d_%H%M%S")
+        session_name = time.strftime("session_%Y%m%d_%H%M%S") + f"_{uuid.uuid4().hex[:6]}"
         self.session_dir = os.path.join(log_dir, session_name)
         os.makedirs(self.session_dir, exist_ok=True)
 

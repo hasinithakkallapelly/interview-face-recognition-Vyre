@@ -28,7 +28,8 @@ pieces that were on the resume but not actually built yet:
   that run without a webcam or any model file, and pass in this
   environment. Run them yourself:
   `python test_identity_verifier.py`, `python test_infraction_counter.py`,
-  `python test_device_detector.py`, `python test_main.py`.
+  `python test_device_detector.py`, `python test_main.py`,
+  `python test_session_logger.py`.
 - `device_detector.py`'s class-ID resolution and confidence filtering are
   tested against a fake model object (no PyTorch needed), but **real YOLO
   inference on real footage was NOT run** — the `ultralytics` install
@@ -68,6 +69,7 @@ asked "why not dlib."
 ```
 main.py                    integrates everything, run this
 config.py                  all tunable constants + CLI flag parsing
+violation_types.py         ViolationType enum -- single source of truth for violation strings
 session_logger.py          persists infraction log + snapshots to session_logs/ (tested)
 identity_verifier.py       LBPH-based identity verification, multi-frame enrollment (tested)
 infraction_counter.py      progressive 3-strike warning/termination logic (tested)
@@ -77,10 +79,13 @@ test_identity_verifier.py  run this to verify identity logic yourself
 test_infraction_counter.py run this to verify infraction logic yourself
 test_device_detector.py    run this to verify device detection logic (no PyTorch needed)
 test_main.py               run this to verify the violation-priority logic
+test_session_logger.py     run this to verify session persistence logic
 models/yolov8n-face.pt     face detection model (included)
 models/yolov8n.pt          NOT included -- auto-downloads via ultralytics, or fetch manually
 requirements.txt
-.github/workflows/tests.yml  CI: runs all four test files on every push/PR
+pyproject.toml             ruff lint config
+LICENSE                    MIT
+.github/workflows/tests.yml  CI: lints with ruff, then runs all five test files, on every push/PR
 ```
 
 ## Setup & run
@@ -91,8 +96,14 @@ python test_identity_verifier.py    # sanity check identity logic
 python test_infraction_counter.py   # sanity check infraction logic
 python test_device_detector.py      # sanity check device detection logic (no PyTorch needed)
 python test_main.py                 # sanity check violation-priority logic
+python test_session_logger.py       # sanity check session persistence logic
 python main.py                      # run the full system (needs a webcam)
 ```
+
+Linting (`ruff check .`) runs in CI on every push; run it locally the same way
+if you want to check before pushing. `ruff format` is intentionally NOT
+enforced -- the codebase doesn't follow ruff's default style, and running it
+would reformat every file for style alone.
 
 All tunables (webcam index, thresholds, max infractions, etc.) live in
 `config.py` and can be overridden via CLI flags — run `python main.py

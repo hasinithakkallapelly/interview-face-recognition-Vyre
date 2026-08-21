@@ -8,8 +8,9 @@ recognition accuracy, which requires actual face photos -- that part
 you'll need to verify yourself with a real webcam.
 """
 
-import numpy as np
 import cv2
+import numpy as np
+
 from identity_verifier import IdentityVerifier
 
 

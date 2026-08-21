@@ -14,21 +14,22 @@ max_infractions distinct violations (see infraction_counter.py). Either
 way, the infraction log is written to disk under session_logs/ on exit.
 """
 
+import contextlib
+import io
 import logging
 import os
 import sys
 import time
 
 import cv2
-import contextlib
-import io
 
 from config import parse_args
-from utils import alert_user, cancel_interview
+from device_detector import DeviceDetector
 from identity_verifier import IdentityVerifier
 from infraction_counter import InfractionCounter
-from device_detector import DeviceDetector
 from session_logger import SessionLogger
+from utils import alert_user, cancel_interview
+from violation_types import ViolationType
 
 logger = logging.getLogger("interview_proctor")
 
@@ -58,15 +59,15 @@ def determine_violation_type(count: int, face_in_center: bool, impersonation_fla
     or any model -- see test_main.py.
     """
     if count == 0:
-        return "no_face"
+        return ViolationType.NO_FACE.value
     if count > 1:
-        return "multiple_faces"
+        return ViolationType.MULTIPLE_FACES.value
     if impersonation_flag:
-        return "impersonation"
+        return ViolationType.IMPERSONATION.value
     if device_hits:
-        return "device_detected"
+        return ViolationType.DEVICE_DETECTED.value
     if not face_in_center:
-        return "off_center"
+        return ViolationType.OFF_CENTER.value
     return None
 
 
@@ -163,7 +164,11 @@ def main():
 
             # ---- Identity enrollment (multi-frame, once the candidate has settled in frame) ----
             enrollment_status = None
-            if not identity.enrolled and count == 1 and face_in_center and frame_count >= cfg.enrollment_frames_to_wait:
+            should_collect_enrollment = (
+                not identity.enrolled and count == 1 and face_in_center
+                and frame_count >= cfg.enrollment_frames_to_wait
+            )
+            if should_collect_enrollment:
                 enrollment_status = identity.collect_enrollment_frame(frame, primary_box)
                 if enrollment_status["enrolled"]:
                     logger.info("Identity enrolled for this session.")
@@ -206,7 +211,8 @@ def main():
 
             # ---- On-screen status ----
             if not identity.enrolled and enrollment_status is not None:
-                status = f"Enrolling identity ({enrollment_status['buffered']}/{enrollment_status['required']})"
+                buffered, required = enrollment_status["buffered"], enrollment_status["required"]
+                status = f"Enrolling identity ({buffered}/{required})"
             else:
                 status = violation_type if violation_type else "OK"
             cv2.putText(frame, f"Status: {status} | Infractions: {infractions.count}/{cfg.max_infractions}",

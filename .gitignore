@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# auto-downloaded general COCO model, not committed (see README)
+models/yolov8n.pt
+
+# per-session output: infraction logs + snapshot frames
+session_logs/
+
+.venv/
+venv/

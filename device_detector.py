@@ -28,14 +28,22 @@ HOW IT WORKS:
   filtering for just these class IDs above a confidence threshold.
 """
 
-from ultralytics import YOLO
-
 PROHIBITED_CLASS_NAMES = {"cell phone", "book", "laptop"}
 
 
 class DeviceDetector:
-    def __init__(self, model_path="models/yolov8n.pt", confidence_threshold=0.4):
-        self.model = YOLO(model_path)
+    def __init__(self, model_path="models/yolov8n.pt", confidence_threshold=0.4, model=None):
+        """
+        model: pass a pre-built model object (e.g. a test double with
+            `.names` and a `__call__`) to skip loading ultralytics/YOLO
+            entirely -- used by test_device_detector.py so the detection
+            logic can be verified without a PyTorch install. Leave None
+            for normal use.
+        """
+        if model is None:
+            from ultralytics import YOLO  # deferred: only needed for real use
+            model = YOLO(model_path)
+        self.model = model
         self.confidence_threshold = confidence_threshold
 
         # Build a set of class IDs matching PROHIBITED_CLASS_NAMES by

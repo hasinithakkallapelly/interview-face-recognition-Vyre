@@ -80,8 +80,33 @@ def test_single_bad_frame_does_not_immediately_flag():
     assert result["flag_impersonation"] is False, "Should not flag on a single mismatched frame"
 
 
+def test_multi_frame_enrollment_buffers_then_trains():
+    # collect_enrollment_frame should buffer frames (not enroll early) and
+    # only flip `enrolled` once the required count is reached.
+    box = (20, 20, 220, 220)
+    verifier = IdentityVerifier(mismatch_threshold=80.0, consecutive_required=3,
+                                 enrollment_frames_required=3)
+
+    r1 = verifier.collect_enrollment_frame(make_synthetic_face(seed=1), box)
+    assert r1 == {"buffered": 1, "required": 3, "enrolled": False}
+    assert verifier.enrolled is False
+
+    r2 = verifier.collect_enrollment_frame(make_synthetic_face(seed=2), box)
+    assert r2["buffered"] == 2 and r2["enrolled"] is False
+
+    r3 = verifier.collect_enrollment_frame(make_synthetic_face(seed=3), box)
+    assert r3["enrolled"] is True
+    assert verifier.enrolled is True
+
+    # a trained-on frame should now verify as a match
+    result = verifier.verify(make_synthetic_face(seed=1), box)
+    print(f"Multi-frame enrollment, verify against seed=1 -> matched={result['matched']}")
+    assert result["matched"] is True
+
+
 if __name__ == "__main__":
     test_enroll_and_match_same_identity()
     test_different_identity_flags_after_consecutive_mismatches()
     test_single_bad_frame_does_not_immediately_flag()
+    test_multi_frame_enrollment_buffers_then_trains()
     print("\nAll identity_verifier tests passed (synthetic data -- verify with real faces too).")

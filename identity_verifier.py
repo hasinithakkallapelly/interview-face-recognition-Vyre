@@ -33,8 +33,10 @@ LIMITATIONS (being upfront):
   a generous default threshold and requires several consecutive
   mismatches (not just one frame) before flagging impersonation, to
   reduce false positives from this.
-- Enrolled on a SINGLE reference frame. A production system would
-  enroll from multiple frames/angles for a more robust reference.
+- `enroll()` trains on a SINGLE reference frame. For a more robust
+  reference, use `collect_enrollment_frame()` instead, which buffers
+  several frames (different head angles/poses as the candidate settles
+  in) and trains on all of them at once -- see below.
 """
 
 import cv2
@@ -42,7 +44,8 @@ import numpy as np
 
 
 class IdentityVerifier:
-    def __init__(self, mismatch_threshold: float = 80.0, consecutive_required: int = 5):
+    def __init__(self, mismatch_threshold: float = 80.0, consecutive_required: int = 5,
+                 enrollment_frames_required: int = 5):
         """
         mismatch_threshold: LBPH distance above which a face is considered
             NOT a match. Lower distance = more similar. 80 is a
@@ -50,12 +53,18 @@ class IdentityVerifier:
         consecutive_required: how many consecutive frames must exceed the
             threshold before we actually flag impersonation, to avoid
             reacting to a single noisy frame.
+        enrollment_frames_required: how many frames `collect_enrollment_frame`
+            buffers (capturing slightly different poses/angles) before
+            training the recognizer, for a more robust reference than a
+            single frame.
         """
         self.recognizer = cv2.face.LBPHFaceRecognizer_create()
         self.enrolled = False
         self.mismatch_threshold = mismatch_threshold
         self.consecutive_required = consecutive_required
         self._consecutive_mismatches = 0
+        self.enrollment_frames_required = enrollment_frames_required
+        self._enrollment_buffer = []
 
     @staticmethod
     def _crop_and_prep(frame, box, size=(200, 200)):
@@ -78,6 +87,35 @@ class IdentityVerifier:
         self.enrolled = True
         self._consecutive_mismatches = 0
         return True
+
+    def collect_enrollment_frame(self, frame, box) -> dict:
+        """
+        Multi-frame enrollment: call this once per tick while the candidate
+        is settling into frame (single face, centered). Buffers up to
+        `enrollment_frames_required` valid crops, then trains the
+        recognizer on all of them at once (label 0 for every image), which
+        is more robust to pose/lighting than a single reference frame.
+
+        Returns {"buffered": int, "required": int, "enrolled": bool}.
+        No-op (returns current state) once already enrolled.
+        """
+        if self.enrolled:
+            return {"buffered": len(self._enrollment_buffer),
+                     "required": self.enrollment_frames_required, "enrolled": True}
+
+        gray = self._crop_and_prep(frame, box)
+        if gray is not None:
+            self._enrollment_buffer.append(gray)
+
+        if len(self._enrollment_buffer) >= self.enrollment_frames_required:
+            labels = np.zeros(len(self._enrollment_buffer), dtype=np.int32)
+            self.recognizer.train(self._enrollment_buffer, labels)
+            self.enrolled = True
+            self._consecutive_mismatches = 0
+            self._enrollment_buffer = []
+
+        return {"buffered": len(self._enrollment_buffer),
+                 "required": self.enrollment_frames_required, "enrolled": self.enrolled}
 
     def verify(self, frame, box) -> dict:
         """

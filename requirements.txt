@@ -1,5 +1,11 @@
 # opencv-contrib-python (NOT plain opencv-python) is required -- it
 # includes cv2.face, which plain opencv-python does not ship.
-ultralytics>=8.0.20
-opencv-contrib-python
-numpy
+#
+# Ranges below are loose compatible-release pins (tested with
+# opencv-contrib-python 5.0.0 / numpy 2.4 in this environment), not exact
+# locks -- ultralytics/PyTorch could not be fully installed and verified
+# here (see README "what's actually verified"). Narrow these once the
+# full stack, including device_detector.py, has been run end-to-end.
+ultralytics>=8.0.20,<9
+opencv-contrib-python>=4.8,<6
+numpy>=1.24,<3

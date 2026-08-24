@@ -1,43 +1,43 @@
 from infraction_counter import InfractionCounter
 
 
-def test_progressive_warnings_then_termination():
-    ic = InfractionCounter(max_infractions=3)
-
-    r1 = ic.notify("off_center", timestamp=1.0)
-    assert r1["new_infraction"] is True and r1["terminated"] is False and r1["count"] == 1
-    print("Infraction 1:", r1["message"])
-
-    r2 = ic.notify("multiple_faces", timestamp=5.0)
-    assert r2["new_infraction"] is True and r2["terminated"] is False and r2["count"] == 2
-    print("Infraction 2:", r2["message"])
-
-    r3 = ic.notify("no_face", timestamp=9.0)
-    assert r3["new_infraction"] is True and r3["terminated"] is True and r3["count"] == 3
-    print("Infraction 3:", r3["message"])
+def test_transient_detection_is_ignored():
+    counter = InfractionCounter(minimum_duration=2.0)
+    counter.notify("no_face", 0.0)
+    result = counter.notify(None, 0.5)
+    assert result["new_infraction"] is False
+    assert counter.count == 0
 
 
-def test_ongoing_violation_not_double_counted():
-    # A candidate off-center continuously across many ticks should count
-    # as ONE infraction, not one per tick.
-    ic = InfractionCounter(max_infractions=3)
-    for t in range(10):
-        ic.notify("off_center", timestamp=float(t))
-    assert ic.count == 1, f"Expected 1 infraction for one continuous violation, got {ic.count}"
-    print(f"10 ticks of continuous off_center -> count={ic.count} (correct: should be 1)")
+def test_continuous_violation_counts_once_after_duration():
+    counter = InfractionCounter(minimum_duration=2.0)
+    counter.notify("off_center", 0.0)
+    assert counter.notify("off_center", 1.9)["new_infraction"] is False
+    assert counter.notify("off_center", 2.0)["new_infraction"] is True
+    assert counter.notify("off_center", 20.0)["new_infraction"] is False
+    assert counter.count == 1
 
 
-def test_violation_clearing_allows_recount():
-    ic = InfractionCounter(max_infractions=5)
-    ic.notify("off_center", timestamp=1.0)   # infraction 1
-    ic.notify(None, timestamp=2.0)           # violation cleared
-    ic.notify("off_center", timestamp=3.0)   # infraction 2 (new occurrence, same type)
-    assert ic.count == 2, f"Expected 2 infractions after clear+re-trigger, got {ic.count}"
-    print(f"Off-center, cleared, off-center again -> count={ic.count} (correct: should be 2)")
+def test_cooldown_blocks_immediate_repeat():
+    counter = InfractionCounter(minimum_duration=1.0, cooldown=5.0)
+    counter.notify("no_face", 0.0)
+    counter.notify("no_face", 1.0)
+    counter.notify(None, 1.1)
+    counter.notify("no_face", 2.0)
+    assert counter.notify("no_face", 3.0)["new_infraction"] is False
+    counter.notify(None, 6.1)
+    counter.notify("no_face", 6.2)
+    assert counter.notify("no_face", 7.2)["new_infraction"] is True
 
 
-if __name__ == "__main__":
-    test_progressive_warnings_then_termination()
-    test_ongoing_violation_not_double_counted()
-    test_violation_clearing_allows_recount()
-    print("\nAll infraction_counter tests passed.")
+def test_terminates_on_third_confirmed_event():
+    counter = InfractionCounter(max_infractions=3, minimum_duration=1.0, cooldown=0)
+    result = None
+    for index, violation in enumerate(("no_face", "off_center", "device_detected")):
+        start = index * 3.0
+        counter.notify(violation, start)
+        result = counter.notify(violation, start + 1.0)
+        counter.notify(None, start + 1.1)
+    assert result["terminated"] is True
+    assert counter.count == 3
+

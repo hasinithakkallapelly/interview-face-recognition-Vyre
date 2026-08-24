@@ -1,84 +1,192 @@
-# AI Interview Proctoring System
+# Interview Proctoring System
 
-Real-time interview monitoring: face presence/positioning, identity
-verification, prohibited device detection, and progressive infraction
-handling with auto-termination.
+A real-time computer-vision prototype that monitors an interview session for face presence, positioning, identity changes, and prohibited objects.
 
-## What's here vs. the original version
+## Features
 
-The original version only monitored face count and position, with
-separate hardcoded timers per violation type (no shared infraction
-count, no identity check, no device detection). This version adds the
-pieces that were on the resume but not actually built yet:
+- Detects zero, one, or multiple faces using YOLO
+- Checks whether the detected face stays near the center of the frame
+- Compares the live face against pre-session candidate reference images
+- Detects phones, books, and laptops using a COCO-trained YOLO model
+- Counts only violations that persist for a configured duration
+- Applies cooldowns so one continuous event is not counted repeatedly
+- Terminates the session after three confirmed infractions
 
-| Feature | Status |
-|---|---|
-| Face presence/position monitoring | Original, working |
-| **Identity verification (LBPH)** | **New — tested, see `test_identity_verifier.py`** |
-| **Progressive infraction counter (3-strike)** | **New — tested, see `test_infraction_counter.py`** |
-| **Prohibited device detection (phone/book/laptop)** | **New — written, NOT runtime-tested (see below)** |
+## How identity checking works
 
-## Important: what's actually verified
+Before the monitored session begins, the application loads one or more reference images of the candidate. It detects the single face in each image and trains an OpenCV LBPH recognizer using those samples.
 
-- `identity_verifier.py` and `infraction_counter.py` were both run and
-  tested in the environment they were built in (synthetic images for
-  identity, direct logic tests for the counter — see the two test files).
-  Run them yourself too: `python test_identity_verifier.py` and
-  `python test_infraction_counter.py`.
-- `device_detector.py` was **written but not executed** — the `ultralytics`
-  install (needs PyTorch, 500MB+) wasn't feasible to fully verify in a
-  sandboxed environment with no webcam anyway. **You must test this
-  yourself** before trusting or describing it as working:
-  1. Download a general COCO-pretrained model: `yolov8n.pt` (not the
-     face-only `yolov8n-face.pt` already in this repo) — the `ultralytics`
-     library auto-downloads it on first use if `models/yolov8n.pt` isn't
-     present, or download manually from the Ultralytics releases page.
-  2. Run `main.py` with a phone or book visibly in frame and confirm it's
-     detected and boxed in red.
-  3. If class IDs don't match (unlikely but possible across model
-     versions), `device_detector.py` reads them from `model.names`
-     dynamically, so it should self-correct — but verify anyway.
+During the session, the live face is compared with the reference samples. Several consecutive mismatches are required before an identity violation is raised.
 
-## Why LBPH instead of dlib 128D embeddings
+This verifies that the person remains consistent with the supplied reference images. It is a prototype, not a production biometric-authentication system.
 
-The original resume claimed dlib-based embeddings, but no dlib code
-ever existed in this project. LBPH (used here) is a lighter, more
-reliably-installable alternative already available through
-`opencv-contrib-python`. It's less accurate than a modern deep embedding
-model, and is sensitive to lighting/pose changes — mitigated here by
-requiring several consecutive mismatched frames (not just one) before
-flagging impersonation. See the docstring in `identity_verifier.py` for
-the full tradeoff explanation — know this if asked "why not dlib."
+## Requirements
 
-## Files
+- Python 3.10–3.12
+- A webcam
+- macOS, Linux, or Windows
+- Internet access on the first run so Ultralytics can download `yolov8n.pt`
+- One or more clear candidate reference images
 
-```
-main.py                    integrates everything, run this
-identity_verifier.py       LBPH-based identity verification (tested)
-infraction_counter.py      progressive 3-strike warning/termination logic (tested)
-device_detector.py         prohibited device detection (NOT runtime-tested -- verify yourself)
-utils.py                   alert_user / cancel_interview helpers (original)
-test_identity_verifier.py  run this to verify identity logic yourself
-test_infraction_counter.py run this to verify infraction logic yourself
-models/yolov8n-face.pt     face detection model (included)
-models/yolov8n.pt          NOT included -- auto-downloads via ultralytics, or fetch manually
-requirements.txt
-```
+The reference images should:
 
-## Setup & run
+- Contain exactly one visible face
+- Be well lit
+- Show the face clearly without heavy obstruction
+- Preferably include two or three slightly different angles
+
+## Setup
+
+### macOS or Linux
 
 ```bash
+git clone https://github.com/hasinithakkallapelly/interview-face-recognition-Vyre.git
+cd interview-face-recognition-Vyre
+
+python3 -m venv .venv
+source .venv/bin/activate
+
+python -m pip install --upgrade pip
 pip install -r requirements.txt
-python test_identity_verifier.py    # sanity check identity logic
-python test_infraction_counter.py   # sanity check infraction logic
-python main.py                      # run the full system (needs a webcam)
 ```
 
-## Known limitations
+### Windows PowerShell
 
-- Identity enrollment uses a single reference frame at session start —
-  no multi-angle enrollment.
-- Device detection confidence threshold (0.4) is a starting point, not
-  tuned against real test footage yet.
-- No persistence/logging of session infraction history to disk — the
-  `InfractionCounter.log` list exists in-memory only.
+```powershell
+git clone https://github.com/hasinithakkallapelly/interview-face-recognition-Vyre.git
+cd interview-face-recognition-Vyre
+
+py -m venv .venv
+.venv\Scripts\Activate.ps1
+
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+## Run
+
+Create a local folder for reference images. It is ignored by Git and should not contain images you intend to publish.
+
+```bash
+mkdir reference_images
+```
+
+Place one or more candidate photographs in that folder, then run:
+
+```bash
+python main.py \
+  --reference-image reference_images/front.jpg \
+  --reference-image reference_images/angle.jpg
+```
+
+For a single reference image:
+
+```bash
+python main.py --reference-image reference_images/front.jpg
+```
+
+Press `Esc` to stop the session.
+
+## Optional arguments
+
+```text
+--camera NUMBER          Camera index; default: 0
+--object-every NUMBER    Run object detection every N frames; default: 5
+--face-model PATH        Path to the face-detection model
+--device-model PATH      Local model path or Ultralytics model name
+```
+
+Example using a different camera:
+
+```bash
+python main.py --reference-image reference_images/front.jpg --camera 1
+```
+
+## Run the tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest -q
+```
+
+The automated tests cover:
+
+- Multiple reference-image enrollment
+- Invalid face crops
+- Consecutive identity mismatches
+- Transient violations
+- Violation-duration thresholds
+- Cooldown behavior
+- Three-infraction termination
+
+Real-world recognition accuracy still needs testing with actual faces, lighting conditions, and camera angles.
+
+## Project structure
+
+```text
+main.py                     Application entry point
+identity_verifier.py        LBPH enrollment and live comparison
+device_detector.py          Prohibited-object detection
+infraction_counter.py       Duration, cooldown, and termination logic
+utils.py                    Alert and cancellation output
+models/yolov8n-face.pt      Face-detection model
+test_identity_verifier.py   Identity-verification tests
+test_infraction_counter.py  Infraction-policy tests
+```
+
+## Configuration
+
+Important values can be adjusted in the code:
+
+- LBPH mismatch threshold: `IdentityVerifier(mismatch_threshold=...)`
+- Consecutive mismatches: `consecutive_required`
+- Violation duration: `minimum_duration`
+- Repeat cooldown: `cooldown`
+- Maximum infractions: `max_infractions`
+
+Thresholds should be calibrated using representative reference and webcam images. A value that works for one camera or lighting environment may be unreliable in another.
+
+## Troubleshooting
+
+### `AttributeError: module 'cv2' has no attribute 'face'`
+
+The standard OpenCV package does not include the LBPH face module. Remove conflicting OpenCV packages and reinstall the contrib build:
+
+```bash
+pip uninstall -y opencv-python opencv-python-headless opencv-contrib-python
+pip install opencv-contrib-python
+```
+
+### Camera does not open
+
+Try another camera index:
+
+```bash
+python main.py --reference-image reference_images/front.jpg --camera 1
+```
+
+On macOS, allow camera access for Terminal or your IDE under:
+
+`System Settings → Privacy & Security → Camera`
+
+### Reference image is rejected
+
+The application requires exactly one detectable face in every reference image. Use a clearer, well-lit image with only the candidate visible.
+
+### Object model download fails
+
+Download `yolov8n.pt` manually and pass its path:
+
+```bash
+python main.py \
+  --reference-image reference_images/front.jpg \
+  --device-model /path/to/yolov8n.pt
+```
+
+## Limitations
+
+- LBPH is sensitive to lighting, pose, image quality, and camera distance
+- This is not liveness detection and does not prevent photograph or video replay attacks
+- Object-detection accuracy depends on the camera view and model confidence
+- All processing is local; session events are not persisted
+- The system requires real-world calibration before use in consequential decisions
